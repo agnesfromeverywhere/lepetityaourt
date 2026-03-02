@@ -117,7 +117,9 @@ const LESSONS = [
 
 const STICKERS = ["⭐","🌟","🏆","🎉","🎈","🦄","🌈","💫","🥳","👏"];
 
-const speak = (text) => {
+const totalWords = LESSONS.reduce((a,l) => a + l.words.length, 0);
+
+function speak(text) {
   if (!window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "fr-FR";
@@ -125,24 +127,25 @@ const speak = (text) => {
   u.pitch = 1.3;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
-};
+}
 
-const celebrate = () => {
+function celebrate() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     [523,659,784,1047].forEach((f,i) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = f; o.type = "sine";
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.frequency.value = f;
+      o.type = "sine";
       g.gain.setValueAtTime(0.3, ctx.currentTime + i*0.15);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i*0.15 + 0.4);
       o.start(ctx.currentTime + i*0.15);
       o.stop(ctx.currentTime + i*0.15 + 0.4);
     });
-  } catch(e) {}
-};
-
-const totalWords = LESSONS.reduce((a,l) => a + l.words.length, 0);
+  } catch (e) {}
+}
 
 function App() {
   const [screen, setScreen] = useState("splash");
@@ -158,6 +161,24 @@ function App() {
   const [sticker, setSticker] = useState(null);
   const [printLesson, setPrintLesson] = useState(null);
 
+  // Load saved progress
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("lpy_progress") || "{}");
+      if (typeof saved.stars === "number") setStars(saved.stars);
+      if (saved.done && typeof saved.done === "object") setDone(saved.done);
+      if (typeof saved.dark === "boolean") setDark(saved.dark);
+    } catch (e) {}
+  }, []);
+
+  // Save progress
+  useEffect(() => {
+    try {
+      localStorage.setItem("lpy_progress", JSON.stringify({ stars, done, dark }));
+    } catch (e) {}
+  }, [stars, done, dark]);
+
+  // Splash -> Home
   useEffect(() => {
     if (screen === "splash") {
       const t = setTimeout(() => setScreen("home"), 2800);
@@ -172,24 +193,28 @@ function App() {
 
   const startQuiz = (l) => {
     const word = l.words[Math.floor(Math.random() * l.words.length)];
-    const others = l.words.filter(w => w.fr !== word.fr).sort(() => .5 - Math.random()).slice(0,3);
+    const others = l.words
+      .filter(w => w.fr !== word.fr)
+      .sort(() => 0.5 - Math.random())
+      .slice(0,3);
     setQuizWord(word);
-    setChoices([word, ...others].sort(() => .5 - Math.random()));
+    setChoices([word, ...others].sort(() => 0.5 - Math.random()));
     setQuizResult(null);
   };
 
-  const nextQuiz = (l) => {
-    const word = l.words[Math.floor(Math.random() * l.words.length)];
-    const others = l.words.filter(w => w.fr !== word.fr).sort(() => .5 - Math.random()).slice(0,3);
-    setQuizWord(word);
-    setChoices([word, ...others].sort(() => .5 - Math.random()));
-    setQuizResult(null);
-  };
+  const nextQuiz = (l) => startQuiz(l);
 
   const bg = dark ? "bg-gray-900" : "bg-gradient-to-b from-indigo-100 via-purple-50 to-yellow-100";
   const card = dark ? "bg-gray-800" : "bg-white";
   const tx = dark ? "text-white" : "text-gray-800";
   const su = dark ? "text-gray-300" : "text-gray-500";
+
+  const headerTitle =
+    screen === "home" ? "Le Petit Yaourt"
+    : screen === "lesson" ? (lesson ? `${lesson.emoji} ${lesson.topicFr}` : "📖 Lesson")
+    : screen === "quiz" ? "🎯 Quiz!"
+    : screen === "about" ? "ℹ️ About"
+    : "👨‍👩‍👧 Parents";
 
   return (
     <div className={`min-h-screen ${bg} flex flex-col items-center pb-10`} style={{fontFamily:"'Segoe UI',sans-serif"}}>
@@ -216,6 +241,7 @@ function App() {
           <div className={`${card} ${tx} rounded-3xl shadow-2xl p-6 w-full max-w-sm`}>
             <h2 className="text-xl font-extrabold mb-1">🖨️ Print Flashcards</h2>
             <p className={`text-sm mb-4 ${su}`}>Print the {printLesson.topic} cards!</p>
+
             <div className="grid grid-cols-2 gap-2 mb-4">
               {printLesson.words.map(w => (
                 <div key={w.fr} className="border-2 border-dashed border-gray-300 rounded-xl p-3 flex flex-col items-center text-center">
@@ -226,6 +252,7 @@ function App() {
                 </div>
               ))}
             </div>
+
             <div className="flex gap-2">
               <button onClick={() => setPrintLesson(null)} className={`flex-1 ${dark?"bg-gray-700":"bg-gray-100"} py-3 rounded-2xl font-bold`}>Cancel</button>
               <button onClick={() => window.print()} className="flex-1 bg-purple-500 text-white py-3 rounded-2xl font-bold">🖨️ Print!</button>
@@ -255,25 +282,22 @@ function App() {
               : <div className="float text-2xl">🇫🇷</div>
             }
             <div>
-              <h1 className={`text-base font-extrabold ${dark?"text-white":"text-purple-700"}`}>
-                {screen==="home"
-                  ? "Le Petit Yaourt"
-                  : screen==="lesson"
-                    ? (lesson ? `${lesson.emoji} ${lesson.topicFr}` : "📖 Lesson")
-                    : screen==="quiz"
-                      ? "🎯 Quiz!"
-                      : screen==="about"
-                        ? "ℹ️ About"
-                        : "👨‍👩‍👧 Parents"}
-              </h1>
-              {screen==="home" && <p className={`text-xs ${su}`}>{totalWords} words • {LESSONS.length} topics</p>}
+              <h1 className={`text-base font-extrabold ${dark?"text-white":"text-purple-700"}`}>{headerTitle}</h1>
+              {screen === "home" && <p className={`text-xs ${su}`}>{totalWords} words • {LESSONS.length} topics</p>}
             </div>
           </div>
+
           <div className="flex items-center gap-2">
-            {lesson && (screen==="lesson" || screen==="quiz") && (
+            {(lesson && (screen === "lesson" || screen === "quiz")) && (
               <button onClick={() => setPrintLesson(lesson)} className="text-lg bg-orange-100 rounded-full w-9 h-9 flex items-center justify-center">🖨️</button>
             )}
-            <button onClick={() => setDark(d=>!d)} className={`text-lg ${dark?"bg-gray-700":"bg-indigo-100"} rounded-full w-9 h-9 flex items-center justify-center`}>{dark?"☀️":"🌙"}</button>
+            <button
+              onClick={() => setDark(d => !d)}
+              className={`text-lg ${dark?"bg-gray-700":"bg-indigo-100"} rounded-full w-9 h-9 flex items-center justify-center`}
+              title="Toggle theme"
+            >
+              {dark ? "☀️" : "🌙"}
+            </button>
             <div className="bg-yellow-400 rounded-full px-3 py-1 font-extrabold text-white text-sm">⭐{stars}</div>
           </div>
         </div>
@@ -286,8 +310,13 @@ function App() {
             <div className="bg-gradient-to-r from-purple-500 to-indigo-500 rounded-3xl p-5 text-white shadow-lg">
               <p className="text-purple-200 text-sm mb-1">Bonjour, petit ami! 👋</p>
               <h2 className="text-2xl font-extrabold">Ready to learn French?</h2>
+
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                {[{v:Object.keys(done).length,l:"Topics done"},{v:stars,l:"Stars"},{v:totalWords,l:"Words"}].map(({v,l}) => (
+                {[
+                  { v:Object.keys(done).length, l:"Topics done" },
+                  { v:stars, l:"Stars" },
+                  { v:totalWords, l:"Words" }
+                ].map(({v,l}) => (
                   <div key={l} className="bg-white bg-opacity-20 rounded-2xl py-2">
                     <p className="text-xl font-extrabold">{v}</p>
                     <p className="text-xs text-purple-100">{l}</p>
@@ -308,10 +337,27 @@ function App() {
                   </div>
                   {done[l.id] && <span className="text-2xl">✅</span>}
                 </div>
+
                 <div className="flex gap-2">
-                  <button onClick={() => { setLesson(l); setIdx(0); setFlipped(false); setScreen("lesson"); }} className="flex-1 bg-white bg-opacity-25 font-bold py-2 rounded-2xl text-sm">📖 Learn</button>
-                  <button onClick={() => { setLesson(l); startQuiz(l); setScreen("quiz"); }} className="flex-1 bg-white bg-opacity-25 font-bold py-2 rounded-2xl text-sm">🎯 Quiz</button>
-                  <button onClick={() => setPrintLesson(l)} className="bg-white bg-opacity-25 font-bold py-2 px-3 rounded-2xl text-sm">🖨️</button>
+                  <button
+                    onClick={() => { setLesson(l); setIdx(0); setFlipped(false); setScreen("lesson"); }}
+                    className="flex-1 bg-white bg-opacity-25 font-bold py-2 rounded-2xl text-sm"
+                  >
+                    📖 Learn
+                  </button>
+                  <button
+                    onClick={() => { setLesson(l); startQuiz(l); setScreen("quiz"); }}
+                    className="flex-1 bg-white bg-opacity-25 font-bold py-2 rounded-2xl text-sm"
+                  >
+                    🎯 Quiz
+                  </button>
+                  <button
+                    onClick={() => setPrintLesson(l)}
+                    className="bg-white bg-opacity-25 font-bold py-2 px-3 rounded-2xl text-sm"
+                    title="Print"
+                  >
+                    🖨️
+                  </button>
                 </div>
               </div>
             ))}
@@ -320,6 +366,7 @@ function App() {
               <button onClick={() => setScreen("parents")} className={`flex-1 ${card} ${tx} rounded-2xl py-3 font-bold text-sm shadow`}>👨‍👩‍👧 For Parents</button>
               <button onClick={() => setScreen("about")} className={`flex-1 ${card} ${tx} rounded-2xl py-3 font-bold text-sm shadow`}>ℹ️ About</button>
             </div>
+
             <p className="text-center text-xs text-gray-400">🦘 Made for little learners in Sydney • © Le Petit Yaourt</p>
           </div>
         )}
@@ -327,6 +374,7 @@ function App() {
         {screen === "lesson" && lesson && (() => {
           const w = lesson.words[idx];
           const pct = ((idx+1)/lesson.words.length)*100;
+
           return (
             <div className="slide flex flex-col items-center gap-4">
               <div className="w-full flex items-center gap-2">
@@ -335,9 +383,16 @@ function App() {
                   <div className="bg-purple-500 h-3 rounded-full transition-all duration-500" style={{width:`${pct}%`}} />
                 </div>
               </div>
-              <div onClick={() => { setFlipped(f=>!f); speak(w.fr); }} className={`w-full bg-gradient-to-br ${lesson.grad} rounded-3xl shadow-xl p-8 flex flex-col items-center gap-4 cursor-pointer`}>
+
+              <div
+                onClick={() => { setFlipped(f => !f); speak(w.fr); }}
+                className={`w-full bg-gradient-to-br ${lesson.grad} rounded-3xl shadow-xl p-8 flex flex-col items-center gap-4 cursor-pointer`}
+                role="button"
+                aria-label="Flip card"
+              >
                 <div className="float text-8xl">{w.e}</div>
                 <div className="text-5xl font-extrabold text-white drop-shadow">{w.fr}</div>
+
                 {flipped ? (
                   <div className="slide flex flex-col items-center gap-2 w-full">
                     <div className="text-2xl text-white font-bold">{w.en}</div>
@@ -345,17 +400,40 @@ function App() {
                       🗣 Sounds like: <strong>{w.sound}</strong>
                     </div>
                   </div>
-                ) : <p className="text-white text-opacity-70 text-sm">👆 Tap to see meaning!</p>}
+                ) : (
+                  <p className="text-white text-opacity-70 text-sm">👆 Tap to see meaning!</p>
+                )}
               </div>
-              <button onClick={() => speak(w.fr)} className="w-full bg-orange-400 text-white font-extrabold py-4 rounded-2xl text-xl shadow-lg">🔊 Say it in French!</button>
+
+              <button onClick={() => speak(w.fr)} className="w-full bg-orange-400 text-white font-extrabold py-4 rounded-2xl text-xl shadow-lg">
+                🔊 Say it in French!
+              </button>
+
               <div className="flex gap-3 w-full">
-                <button onClick={() => { if(idx>0){setIdx(i=>i-1);setFlipped(false);} }} disabled={idx===0}
-                  className={`flex-1 ${dark?"bg-gray-700 text-white":"bg-gray-200 text-gray-700"} disabled:opacity-40 font-bold py-3 rounded-2xl text-lg`}>⬅️ Back</button>
-                <button onClick={() => {
-                  if (idx < lesson.words.length-1) { setIdx(i=>i+1); setFlipped(false); }
-                  else { setStars(s=>s+2); setDone(d=>({...d,[lesson.id]:true})); celebrate(); showSticker(); setTimeout(()=>{setScreen("home");setLesson(null);},2000); }
-                }} className="flex-1 bg-purple-500 text-white font-bold py-3 rounded-2xl text-lg shadow">
-                  {idx===lesson.words.length-1?"🎉 Finish!":"Next ➡️"}
+                <button
+                  onClick={() => { if (idx > 0) { setIdx(i => i-1); setFlipped(false); } }}
+                  disabled={idx===0}
+                  className={`flex-1 ${dark?"bg-gray-700 text-white":"bg-gray-200 text-gray-700"} disabled:opacity-40 font-bold py-3 rounded-2xl text-lg`}
+                >
+                  ⬅️ Back
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (idx < lesson.words.length-1) {
+                      setIdx(i => i+1);
+                      setFlipped(false);
+                    } else {
+                      setStars(s => s+2);
+                      setDone(d => ({...d, [lesson.id]: true}));
+                      celebrate();
+                      showSticker();
+                      setTimeout(() => { setScreen("home"); setLesson(null); }, 2000);
+                    }
+                  }}
+                  className="flex-1 bg-purple-500 text-white font-bold py-3 rounded-2xl text-lg shadow"
+                >
+                  {idx===lesson.words.length-1 ? "🎉 Finish!" : "Next ➡️"}
                 </button>
               </div>
             </div>
@@ -365,34 +443,49 @@ function App() {
         {screen === "quiz" && lesson && quizWord && (
           <div className="slide flex flex-col items-center gap-5">
             <p className={`text-base font-semibold ${su}`}>Which picture matches...</p>
+
             <div className={`w-full bg-gradient-to-r ${lesson.grad} rounded-3xl shadow-xl px-8 py-6 flex flex-col items-center`}>
               <p className="text-5xl font-extrabold text-white">{quizWord.fr}</p>
               <p className="text-white text-opacity-70 text-sm mt-1">Pick the right one! 👇</p>
             </div>
+
             <div className="grid grid-cols-2 gap-3 w-full">
               {choices.map((c,i) => {
                 let cls = `${card} border-2 border-transparent`;
                 if (quizResult==="correct" && c.fr===quizWord.fr) cls = "bg-green-100 border-2 border-green-400";
+
                 return (
-                  <button key={i} onClick={() => {
-                    if (quizResult) return;
-                    if (c.fr === quizWord.fr) {
-                      setQuizResult("correct"); setStars(s=>s+1); speak(quizWord.fr); showSticker();
-                      setTimeout(() => nextQuiz(lesson), 1800);
-                    } else {
-                      setQuizResult("wrong");
-                      setTimeout(() => setQuizResult(null), 1000);
-                    }
-                  }} className={`${cls} rounded-2xl shadow-md p-5 flex flex-col items-center gap-2`}>
+                  <button
+                    key={i}
+                    onClick={() => {
+                      if (quizResult) return;
+
+                      if (c.fr === quizWord.fr) {
+                        setQuizResult("correct");
+                        setStars(s => s+1);
+                        speak(quizWord.fr);
+                        showSticker();
+                        setTimeout(() => nextQuiz(lesson), 1800);
+                      } else {
+                        setQuizResult("wrong");
+                        setTimeout(() => setQuizResult(null), 1000);
+                      }
+                    }}
+                    className={`${cls} rounded-2xl shadow-md p-5 flex flex-col items-center gap-2`}
+                  >
                     <span className="text-5xl">{c.e}</span>
                     <span className={`text-sm font-semibold ${tx}`}>{c.en}</span>
                   </button>
                 );
               })}
             </div>
+
             {quizResult==="correct" && <div className="text-green-600 font-extrabold text-2xl animate-bounce">✅ Super bien! 🎉</div>}
             {quizResult==="wrong" && <div className="text-red-400 font-bold text-xl">Essaie encore! 💪</div>}
-            <button onClick={() => speak(quizWord.fr)} className="w-full bg-orange-400 text-white font-extrabold py-3 rounded-2xl text-lg shadow">🔊 Hear the word!</button>
+
+            <button onClick={() => speak(quizWord.fr)} className="w-full bg-orange-400 text-white font-extrabold py-3 rounded-2xl text-lg shadow">
+              🔊 Hear the word!
+            </button>
           </div>
         )}
 
@@ -403,6 +496,7 @@ function App() {
               <h2 className="text-2xl font-extrabold">Parent Corner</h2>
               <p className="text-teal-100 text-sm mt-1">Tips for teaching French to your toddler</p>
             </div>
+
             {[
               {icon:"🕐",title:"Best time to learn",tip:"10-15 minutes a day is perfect for toddlers. Try after breakfast or before bathtime."},
               {icon:"🔊",title:"Always say it out loud",tip:"Tap the sound button and repeat the word together! Hearing and repeating is how toddlers learn best."},
@@ -431,6 +525,7 @@ function App() {
               <h2 className="text-2xl font-extrabold">Le Petit Yaourt</h2>
               <p className="text-purple-200 text-sm mt-1">Premium French for Toddlers</p>
             </div>
+
             {[
               {icon:"✨",title:"What is Le Petit Yaourt?",body:"A beautifully designed French learning app for toddlers aged 1-4. No ads, no subscriptions, just pure joyful learning."},
               {icon:"📚",title:`${totalWords} Words across ${LESSONS.length} Topics`,body:"Numbers, animals, fruits, vegetables, meals, table items, vehicles, body parts, clothes, colors and greetings!"},
@@ -447,16 +542,20 @@ function App() {
                 </div>
               </div>
             ))}
+
             <div className={`${card} rounded-2xl shadow p-4 text-center`}>
               <p className={`font-extrabold text-sm ${tx}`}>© Le Petit Yaourt</p>
               <p className={`text-xs mt-1 ${su}`}>Made with love for bilingual families around the world 🌍</p>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
+// Mount app
+const rootEl = document.getElementById("root");
+const root = ReactDOM.createRoot(rootEl);
 root.render(<App />);
